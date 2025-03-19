@@ -188,6 +188,8 @@ class SoloParkour(VecTask):
         self.foot_velocities = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
         # TODO: Find a way to have these two keep the view like dof_pos and dof_vel to avoid having to update them manually
 
+        print("Self Feet Indices: ", self.feet_indices)
+
         # Initialize some data and tensors used later on
         self.common_step_counter = 0
         self.extras = {}
@@ -1112,6 +1114,9 @@ class SoloParkour(VecTask):
                 -10.0,  # Hard higher limit on torques
                 10.0,  # Hard lower limit on torques
             )
+
+            print("torques", torques)
+            print("torques.shape", torques.shape)
 
             # Saturating command torques (on Solo we saturate the max currents)
             # torques = torch.clamp(torques, -3.5, 3.5)

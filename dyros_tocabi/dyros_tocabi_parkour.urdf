@@ -498,7 +498,8 @@
   </link>
   <joint
     name="R_Foot_Joint"
-    type="fixed">
+    type="fixed"
+    dont_collapse="true">
     <origin
       xyz="0 0 0"
       rpy="0 0 0" />
@@ -953,7 +954,8 @@
   </link>
   <joint
     name="L_Foot_Joint"
-    type="fixed">
+    type="fixed"
+    dont_collapse="true">
     <origin
       xyz="0 0 0"
       rpy="0 0 0" />

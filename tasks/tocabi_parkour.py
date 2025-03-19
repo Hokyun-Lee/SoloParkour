@@ -135,6 +135,20 @@ class TocabiParkour(VecTask):
         # Initialization of the parent class VecTask
         super().__init__(config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id,
                          headless=headless, virtual_screen_capture=virtual_screen_capture, force_render=force_render)
+        
+        self.Kp_tocabi = torch.tensor([2000.0, 5000.0, 4000.0, 3700.0, 3200.0, 3200.0,
+            2000.0, 5000.0, 4000.0, 3700.0, 3200.0, 3200.0,
+            6000.0, 10000.0, 10000.0,
+            400.0, 1000.0, 400.0, 400.0, 400.0, 400.0, 100.0, 100.0,
+            100.0, 100.0,
+            400.0, 1000.0, 400.0, 400.0, 400.0, 400.0, 100.0, 100.0], dtype=torch.float ,device=self.device) / 9.0
+
+        self.Kv_tocabi = torch.tensor([15.0, 50.0, 20.0, 25.0, 24.0, 24.0,
+            15.0, 50.0, 20.0, 25.0, 24.0, 24.0,
+            200.0, 100.0, 100.0,
+            10.0, 28.0, 10.0, 10.0, 10.0, 10.0, 3.0, 3.0,
+            2.0, 2.0,
+            10.0, 28.0, 10.0, 10.0, 10.0, 10.0, 3.0, 3.0], dtype=torch.float ,device=self.device) / 3.0
 
         # Reapply time step value because it gets overwritten in VecTask
         self.dt = self.decimation * self.cfg["sim"]["dt"]
@@ -183,6 +197,15 @@ class TocabiParkour(VecTask):
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
         self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
         self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
+
+        self.initial_dof_pos = torch.zeros_like(self.dof_pos, device=self.device, dtype=torch.float)
+        self.initial_dof_pos[:,0:] = torch.tensor([0.0, 0.0, -0.24, 0.6, -0.36, 0.0, \
+                                                    0.0, 0.0, -0.24, 0.6, -0.36, 0.0, \
+                                                    0.0, 0.0, 0.0, \
+                                                    0.3, 0.3, 1.5, -1.27, -1.0, 0.0, -1.0, 0.0,\
+                                                    0.0, 0.0, \
+                                                    -0.3, -0.3, -1.5, 1.27, 1.0, 0.0, 1.0, 0.0], device=self.device)
+
         self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3) # shape: num_envs, num_bodies, xyz axis
         self.rigid_body_state = gymtorch.wrap_tensor(rigid_body_state)
         self.force_sensor = gymtorch.wrap_tensor(force_sensor_tensor)
@@ -218,7 +241,8 @@ class TocabiParkour(VecTask):
         self.base_pos = torch.zeros((self.num_envs, 3), dtype=torch.float, device=self.device, requires_grad=False)
         self.base_quat = torch.zeros((self.num_envs, 4), dtype=torch.float, device=self.device, requires_grad=False)
         self.base_quat[:, 3] = 1.0
-        self.filtered_contact_forces = torch.zeros((self.num_envs, 4, 3, 5), dtype=torch.float, device=self.device, requires_grad=False)
+        # self.filtered_contact_forces = torch.zeros((self.num_envs, 4, 3, 5), dtype=torch.float, device=self.device, requires_grad=False)
+        self.filtered_contact_forces = torch.zeros((self.num_envs, 2, 3, 5), dtype=torch.float, device=self.device, requires_grad=False)
         self.move_up_flag = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False)
         self.camera_pos = np.zeros(3)
         self.ceilings = torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
@@ -328,12 +352,20 @@ class TocabiParkour(VecTask):
         asset_options.disable_gravity = False
 
         # Loading Solo-12 asset with default properties
-        self.solo_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
-        self.num_dof = self.gym.get_asset_dof_count(self.solo_asset)
-        self.num_bodies = self.gym.get_asset_rigid_body_count(self.solo_asset)
+        # Loading Tocabi asset with default properties
+        self.tocabi_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
+        self.num_dof = self.gym.get_asset_dof_count(self.tocabi_asset)
+        self.num_bodies = self.gym.get_asset_rigid_body_count(self.tocabi_asset)
+
+        self.action_high = torch.tensor([333, 232, 263, 289, 222, 166, \
+                                        333, 232, 263, 289, 222, 166, \
+                                        303, 303, 303, \
+                                        64, 64, 64, 64, 23, 23, 10, 10,\
+                                        10, 10, \
+                                        64, 64, 64, 64, 23, 23, 10, 10], device=self.device)
 
         # Prepare friction randomization
-        rigid_shape_prop = self.gym.get_asset_rigid_shape_properties(self.solo_asset)
+        rigid_shape_prop = self.gym.get_asset_rigid_shape_properties(self.tocabi_asset)
         friction_range = self.cfg["env"]["learn"]["frictionRange"]
         num_buckets = 100
         friction_buckets = torch_rand_float(friction_range[0], friction_range[1], (num_buckets,1), device=self.device)
@@ -344,30 +376,31 @@ class TocabiParkour(VecTask):
         start_pose.p = gymapi.Vec3(*self.base_init_state[:3])
 
         # Loading body, DoF, knee, shin and feet names
-        body_names = self.gym.get_asset_rigid_body_names(self.solo_asset)
-        self.dof_names = self.gym.get_asset_dof_names(self.solo_asset)
+        body_names = self.gym.get_asset_rigid_body_names(self.tocabi_asset)
+        self.dof_names = self.gym.get_asset_dof_names(self.tocabi_asset)
         foot_name = self.cfg["env"]["urdfAsset"]["footName"]
         # shin_name = self.cfg["env"]["urdfAsset"]["shinName"]
         thigh_name = self.cfg["env"]["urdfAsset"]["thighName"]
         knee_name = self.cfg["env"]["urdfAsset"]["kneeName"]
         feet_names = [s for s in body_names if foot_name in s]
+        print("feet_names", feet_names)
         # shin_names = [s for s in body_names if shin_name in s]
         thigh_names = [s for s in body_names if thigh_name in s]
         knee_names = [s for s in body_names if knee_name in s]
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         self.grf_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         # self.shin_indices = torch.zeros(len(shin_names), dtype=torch.long, device=self.device, requires_grad=False)
-        self.shin_indices = torch.zeros(len(thigh_names), dtype=torch.long, device=self.device, requires_grad=False)
+        self.thigh_indices = torch.zeros(len(thigh_names), dtype=torch.long, device=self.device, requires_grad=False)
         self.knee_indices = torch.zeros(len(knee_names), dtype=torch.long, device=self.device, requires_grad=False)
         self.base_index = 0
 
         # Apply the armature value to all joints (i.e. take into account the motor inertia seen at joint level)
-        dof_props = self.gym.get_asset_dof_properties(self.solo_asset)
+        dof_props = self.gym.get_asset_dof_properties(self.tocabi_asset)
         dof_props["armature"].fill(self.cfg["env"]["urdfAsset"]["armature"])
 
         # Add a pseudo-Inertia Measurement Unit sensor through the use of a force sensor on the base
         # imu_pose = gymapi.Transform()
-        # self.gym.create_asset_force_sensor(self.solo_asset, self.base_index, imu_pose)
+        # self.gym.create_asset_force_sensor(self.tocabi_asset, self.base_index, imu_pose)
 
         # Gather env origins and spread the robots over the whole terrain
         # The terrain is divided into rows (levels) and columns (types), each cell being a potential spawn location
@@ -389,7 +422,7 @@ class TocabiParkour(VecTask):
         # Create the env instances and save the handles to interact with them
         env_lower = gymapi.Vec3(-spacing, -spacing, 0.0)
         env_upper = gymapi.Vec3(spacing, spacing, spacing)
-        self.solo_handles = []
+        self.tocabi_handles = []
         self.envs = []
         self.cam_handles = []
         for i in range(self.num_envs):
@@ -405,35 +438,36 @@ class TocabiParkour(VecTask):
             if self.randomize_friction:
                 for s in range(len(rigid_shape_prop)):
                     rigid_shape_prop[s].friction = friction_buckets[i % num_buckets]
-            self.gym.set_asset_rigid_shape_properties(self.solo_asset, rigid_shape_prop)
-            solo_handle = self.gym.create_actor(env_handle, self.solo_asset, start_pose, "solo", i, 0, 0)
-            self.gym.set_actor_dof_properties(env_handle, solo_handle, dof_props)
+            self.gym.set_asset_rigid_shape_properties(self.tocabi_asset, rigid_shape_prop)
+            tocabi_handle = self.gym.create_actor(env_handle, self.tocabi_asset, start_pose, "tocabi", i, 0, 0)
+            self.gym.set_actor_dof_properties(env_handle, tocabi_handle, dof_props)
             self.envs.append(env_handle)
-            self.solo_handles.append(solo_handle)
-            self.attach_camera(i, env_handle, solo_handle)
+            self.tocabi_handles.append(tocabi_handle)
+            self.attach_camera(i, env_handle, tocabi_handle)
 
         # Gather base, knee, shin and feet indices based on their name
-        self.base_index = self.gym.find_actor_rigid_body_handle(self.envs[0], self.solo_handles[0], self.cfg["env"]["urdfAsset"]["baseName"])
+        # Gather base, knee, thigh and feet indices based on their name
+        self.base_index = self.gym.find_actor_rigid_body_handle(self.envs[0], self.tocabi_handles[0], self.cfg["env"]["urdfAsset"]["baseName"])
         for i in range(len(knee_names)):
-            self.knee_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.solo_handles[0], knee_names[i])
+            self.knee_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.tocabi_handles[0], knee_names[i])
         if not self.cfg["env"]["urdfAsset"]["collapseFixedJoints"]:
             # If collapseFixedJoints is True, then the feet are collapsed into the shin and "shin + feet" become feet
-            for i in range(len(shin_names)):
-                self.shin_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.solo_handles[0], shin_names[i])
+            for i in range(len(thigh_names)):
+                self.thigh_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.tocabi_handles[0], thigh_names[i])
         for i in range(len(feet_names)):
-            self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.solo_handles[0], feet_names[i])
+            self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.tocabi_handles[0], feet_names[i])
 
         # If feet are collapsed, use shin for ground reaction forces, otherwise use the feet
         if False: # self.cfg["env"]["urdfAsset"]["collapseFixedJoints"]:
-            for i in range(len(shin_names)):
-                self.grf_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.solo_handles[0], shin_names[i])
+            for i in range(len(thigh_names)):
+                self.grf_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.tocabi_handles[0], thigh_names[i])
         else:
             for i in range(len(feet_names)):
-                self.grf_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.solo_handles[0], feet_names[i])
+                self.grf_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.tocabi_handles[0], feet_names[i])
         # TODO: Double-check which one to use
 
         # Retrieve base mass from body properties
-        body_props = self.gym.get_actor_rigid_body_properties(self.envs[0], self.solo_handles[0])
+        body_props = self.gym.get_actor_rigid_body_properties(self.envs[0], self.tocabi_handles[0])
         self.base_mass = body_props[self.base_index].mass
 
     ####################
@@ -1108,26 +1142,74 @@ class TocabiParkour(VecTask):
         # There is self.decimation steps of simulation between each call to the policy
         for i in range(self.decimation):
 
-            torques = torch.clip(
+            # print(self.Kp)
+            # print(self.Kd)
+            # print(self.default_dof_pos.shape)
+            # print(self.dof_pos.shape)
+            # print(self.dof_vel.shape)
+            # print(self.action_scale)
+            # print(self.actions.shape)
+
+            # torques = torch.clip(
+            #     (
+            #         self.Kp
+            #         * (
+            #             self.action_scale * self.actions
+            #             + self.default_dof_pos
+            #             - self.dof_pos
+            #         )
+            #         - self.Kd * self.dof_vel
+            #     ),
+            #     -10.0,  # Hard higher limit on torques
+            #     10.0,  # Hard lower limit on torques
+            # )
+
+            upper_torque = self.Kp_tocabi[12:]*(self.initial_dof_pos[:,12:] - self.dof_pos[:,12:]) + self.Kv_tocabi[12:]*(-self.dof_vel[:,12:])
+
+            ## TODO : check if the torque is clipped to the right value
+            lower_torque = torch.clip(
                 (
-                    self.Kp
+                    self.Kp_tocabi[:12]
                     * (
-                        self.action_scale * self.actions
-                        + self.default_dof_pos
-                        - self.dof_pos
+                        self.action_scale * self.actions[:,:12]
+                        + self.default_dof_pos[:,:12]
+                        - self.dof_pos[:,:12]
                     )
-                    - self.Kd * self.dof_vel
+                    - self.Kv_tocabi[:12] * self.dof_vel[:,:12]
                 ),
-                -10.0,  # Hard higher limit on torques
-                10.0,  # Hard lower limit on torques
+                -self.action_high[:12],  # Hard higher limit on torques
+                self.action_high[:12],  # Hard lower limit on torques
             )
 
-            # Saturating command torques (on Solo we saturate the max currents)
+            # print("upper_torque", upper_torque)
+            print("upper_torque.shape", upper_torque.shape)
+            # print("lower_torque", lower_torque)
+            # print("self.Kp_tocabi", self.Kp_tocabi)
+            print("self.Kp_tocabi.shape", self.Kp_tocabi.shape)
+            # print("self.Kv_tocabi", self.Kv_tocabi)
+            print("self.Kv_tocabi.shape", self.Kv_tocabi.shape)
+
+            # print("self.actions[:,:12]", self.actions[:,:12])
+            print("self.actions[:,:12].shape", self.actions[:,:12].shape)
+            # print("self.default_dof_pos[:,:12]", self.default_dof_pos[:,:12])
+            print("self.default_dof_pos[:,:12].shape", self.default_dof_pos[:,:12].shape)
+            # print("self.dof_pos[:,:12]", self.dof_pos[:,:12])
+            print("self.dof_pos.shape[:,:12]", self.dof_pos[:,:12].shape)
+            # print("self.dof_vel[:,:12]", self.dof_vel[:,:12])
+            print("self.dof_vel.shape[:,:12]", self.dof_vel[:,:12].shape)
+            
+            torques = torch.cat((lower_torque, upper_torque), dim=1)
+
+            print("torques", torques)
+            print("torques.shape", torques.shape)
+            
+
+            # Saturating command torques (on tocabi we saturate the max currents)
             # torques = torch.clamp(torques, -3.5, 3.5)
 
             # Send desired joint torques to the simulation, run one step of simulator then refresh joint states
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(torques))
-            self.torques = torques.view(self.torques.shape)
+            self.torques = torques[:,:12].view(self.torques.shape)
             self.gym.simulate(self.sim)
             if self.device == 'cpu':
                 self.gym.fetch_results(self.sim, True)

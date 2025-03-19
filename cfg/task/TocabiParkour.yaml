@@ -19,6 +19,7 @@ env:
 
   terrain:
     terrainType: trimesh # none, plane, or trimesh
+    # terrainType: plane # none, plane, or trimesh
     staticFriction: 1.0 # [-]
     dynamicFriction: 1.0 # [-]
     restitution: 0. # [-]
