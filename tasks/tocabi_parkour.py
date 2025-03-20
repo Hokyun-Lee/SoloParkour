@@ -205,6 +205,10 @@ class TocabiParkour(VecTask):
                                                     0.3, 0.3, 1.5, -1.27, -1.0, 0.0, -1.0, 0.0,\
                                                     0.0, 0.0, \
                                                     -0.3, -0.3, -1.5, 1.27, 1.0, 0.0, 1.0, 0.0], device=self.device)
+        self.initial_dof_vel = torch.zeros_like(self.dof_vel, device=self.device, dtype=torch.float)
+        
+        self.dof_pos[:] = self.initial_dof_pos[:]
+        self.dof_vel[:] = self.initial_dof_vel[:]
 
         self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3) # shape: num_envs, num_bodies, xyz axis
         self.rigid_body_state = gymtorch.wrap_tensor(rigid_body_state)
@@ -215,7 +219,7 @@ class TocabiParkour(VecTask):
         self.foot_velocities = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
         # TODO: Find a way to have these two keep the view like dof_pos and dof_vel to avoid having to update them manually
 
-        print("self.feet_indices :", self.feet_indices)
+        # print("self.feet_indices :", self.feet_indices)
 
         # Initialize some data and tensors used later on
         self.common_step_counter = 0
@@ -231,8 +235,8 @@ class TocabiParkour(VecTask):
         self.contacts_filt = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False)
         self.contacts_last = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False)
         self.contacts_touchdown = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False)
-        self.feet_gait_time = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device, requires_grad=False)
-        self.feet_swing_time = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device, requires_grad=False)
+        self.feet_gait_time = torch.zeros(self.num_envs, 2, dtype=torch.float, device=self.device, requires_grad=False)
+        self.feet_swing_time = torch.zeros(self.num_envs, 2, dtype=torch.float, device=self.device, requires_grad=False)
         self.feet_swing_apex = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.float, device=self.device, requires_grad=False)
         self.feet_clearance = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.float, device=self.device, requires_grad=False)
         self.feet_clearance_cstr = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device, requires_grad=False)
@@ -270,6 +274,8 @@ class TocabiParkour(VecTask):
             name = self.dof_names[i]
             angle = self.named_default_joint_angles[name]
             self.default_dof_pos[:, i] = angle
+
+        self.default_dof_pos = self.initial_dof_pos[:]
 
         # Logging rewards over the whole episodes (cumulative sum)
         torch_zeros = lambda : torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
@@ -383,7 +389,7 @@ class TocabiParkour(VecTask):
         thigh_name = self.cfg["env"]["urdfAsset"]["thighName"]
         knee_name = self.cfg["env"]["urdfAsset"]["kneeName"]
         feet_names = [s for s in body_names if foot_name in s]
-        print("feet_names", feet_names)
+        # print("feet_names", feet_names)
         # shin_names = [s for s in body_names if shin_name in s]
         thigh_names = [s for s in body_names if thigh_name in s]
         knee_names = [s for s in body_names if knee_name in s]
@@ -501,6 +507,7 @@ class TocabiParkour(VecTask):
                 self.observation_names.append(name)
                 name = "observe_" + name
                 self.observation_functions.append(getattr(self, name))
+                # print("name", name)
 
     def prepare_noise_functions(self):
         """Prepares a list of noise functions, which will be called to noise the observations
@@ -513,6 +520,7 @@ class TocabiParkour(VecTask):
         for name in self.cfg["env"]["learn"]["observe"].keys():
             if self.cfg["env"]["learn"]["observe"][name]:
                 name = "noise_" + name
+                # print("name", name)
                 self.noise_functions.append(getattr(self, name))
 
     def get_dim_observations(self):
@@ -540,6 +548,8 @@ class TocabiParkour(VecTask):
                 ),
                 dim=-1,
             )
+            # print("noise_vec", noise_vec)
+            # print("noise_vec.shape", noise_vec.shape)
 
         noise_vec *= self.cfg["env"]["learn"]["noiseLevel"]
 
@@ -555,6 +565,8 @@ class TocabiParkour(VecTask):
         obs_meas = torch.zeros(
             0, dtype=torch.float, device=self.device, requires_grad=False
         )
+
+        # print("self.observation_functions", self.observation_functions)
         for observation_function in self.observation_functions:
             obs_meas = torch.cat(
                 (
@@ -563,8 +575,16 @@ class TocabiParkour(VecTask):
                 ),
                 dim=-1,
             )
+            # print("obs_meas", obs_meas)
+            # print("obs_meas.shape", obs_meas.shape)
 
         # Add noise to observation sample
+
+        # print("obs_meas", obs_meas)
+        # print("obs_meas.shape", obs_meas.shape)
+        # print("self.noise_scale_vec", self.noise_scale_vec)
+        # print("self.noise_scale_vec.shape", self.noise_scale_vec.shape)
+
         if self.add_noise:
             obs_meas += (2 * torch.rand_like(obs_meas) - 1) * self.noise_scale_vec
 
@@ -601,6 +621,7 @@ class TocabiParkour(VecTask):
     def dim_obs_misc(self):
         """Dimension of miscellaneous observations."""
         return 39 # 123
+        # return 81 # 123
 
     def dim_obs_heights(self):
         """Dimension of height scan observations."""
@@ -653,8 +674,8 @@ class TocabiParkour(VecTask):
         See https://forums.developer.nvidia.com/t/dof-velocity-offset-at-rest/205799/11
         """
         return torch.cat((self.projected_gravity,  # projected gravity, an image of the orientation (t)
-                          self.dof_pos * self.dof_pos_scale, # joint positions (t)
-                          ((self.dof_pos - self.last_dof_pos[:, :, 0]) / self.dt) * self.dof_vel_scale, # joint velocities (t)
+                          self.dof_pos[:,:12] * self.dof_pos_scale, # joint positions (t)
+                          ((self.dof_pos[:,:12] - self.last_dof_pos[:, :12, 0]) / self.dt) * self.dof_vel_scale, # joint velocities (t)
                           self.actions, # joint position targets (t - 1)
                          ), dim=-1)
 
@@ -868,7 +889,7 @@ class TocabiParkour(VecTask):
         # Constraint to not fall outside of the tracj
         cstr_lava = self.root_states[:, 2] < -0.05
 
-        cstr_minbaseheight = (self.limits["min_base_height"] - self.root_states[:, 2]) * (self.ceilings >= 0.34).float()
+        cstr_minbaseheight = (self.limits["min_base_height"] - self.root_states[:, 2]) * (self.ceilings >= 0.60).float()
 
         cstr_foot_stumble = torch.norm(self.contact_forces[:, self.grf_indices, :2], dim=2) - 4.0*torch.abs(self.contact_forces[:, self.grf_indices, 2])
 
@@ -889,17 +910,17 @@ class TocabiParkour(VecTask):
         cstr_2footcontact = torch.abs((self.contact_forces[:, self.grf_indices, 2] > 1.0).sum(1) - 2.0)
 
         # Apply aesthetics constraints only on flat terrains
-        self.is_flat_terrain = (((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.34)) | (self.terrain_levels <= 1)).float()
+        self.is_flat_terrain = (((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.60)) | (self.terrain_levels <= 1)).float()
 
         cstr_base_orientation *= self.is_flat_terrain
 
         # We impose a certain walking style on flat surfaces to make the robot walk very nicely
         command_vel = torch.norm(self.commands[:, :2], dim=1)
-        cstr_2footcontact *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.34)).float()
+        cstr_2footcontact *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.60)).float()
         cstr_2footcontact *= (command_vel > self.vel_deadzone).float()
 
-        cstr_HFE_style *= ((self.ceilings >= 0.34) & (self.terrain_levels <= 4)).unsqueeze(1).float()
-        cstr_nomove *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.34)).float().unsqueeze(1)
+        cstr_HFE_style *= ((self.ceilings >= 0.60) & (self.terrain_levels <= 4)).unsqueeze(1).float()
+        cstr_nomove *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.60)).float().unsqueeze(1)
 
         # ------------ Applying constraints ----------------
 
@@ -1181,27 +1202,27 @@ class TocabiParkour(VecTask):
                 self.action_high[:12],  # Hard lower limit on torques
             )
 
-            # print("upper_torque", upper_torque)
-            print("upper_torque.shape", upper_torque.shape)
-            # print("lower_torque", lower_torque)
-            # print("self.Kp_tocabi", self.Kp_tocabi)
-            print("self.Kp_tocabi.shape", self.Kp_tocabi.shape)
-            # print("self.Kv_tocabi", self.Kv_tocabi)
-            print("self.Kv_tocabi.shape", self.Kv_tocabi.shape)
+            # # print("upper_torque", upper_torque)
+            # print("upper_torque.shape", upper_torque.shape)
+            # # print("lower_torque", lower_torque)
+            # # print("self.Kp_tocabi", self.Kp_tocabi)
+            # print("self.Kp_tocabi.shape", self.Kp_tocabi.shape)
+            # # print("self.Kv_tocabi", self.Kv_tocabi)
+            # print("self.Kv_tocabi.shape", self.Kv_tocabi.shape)
 
-            # print("self.actions[:,:12]", self.actions[:,:12])
-            print("self.actions[:,:12].shape", self.actions[:,:12].shape)
-            # print("self.default_dof_pos[:,:12]", self.default_dof_pos[:,:12])
-            print("self.default_dof_pos[:,:12].shape", self.default_dof_pos[:,:12].shape)
-            # print("self.dof_pos[:,:12]", self.dof_pos[:,:12])
-            print("self.dof_pos.shape[:,:12]", self.dof_pos[:,:12].shape)
-            # print("self.dof_vel[:,:12]", self.dof_vel[:,:12])
-            print("self.dof_vel.shape[:,:12]", self.dof_vel[:,:12].shape)
+            # # print("self.actions[:,:12]", self.actions[:,:12])
+            # print("self.actions[:,:12].shape", self.actions[:,:12].shape)
+            # # print("self.default_dof_pos[:,:12]", self.default_dof_pos[:,:12])
+            # print("self.default_dof_pos[:,:12].shape", self.default_dof_pos[:,:12].shape)
+            # # print("self.dof_pos[:,:12]", self.dof_pos[:,:12])
+            # print("self.dof_pos.shape[:,:12]", self.dof_pos[:,:12].shape)
+            # # print("self.dof_vel[:,:12]", self.dof_vel[:,:12])
+            # print("self.dof_vel.shape[:,:12]", self.dof_vel[:,:12].shape)
             
             torques = torch.cat((lower_torque, upper_torque), dim=1)
 
-            print("torques", torques)
-            print("torques.shape", torques.shape)
+            # print("torques", torques)
+            # print("torques.shape", torques.shape)
             
 
             # Saturating command torques (on tocabi we saturate the max currents)

@@ -44,7 +44,7 @@ env:
       random_uniform: 0.0
 
   baseInitState:
-    pos: [0.0, 0.0, 0.3] # x,y,z [m]
+    pos: [0.0, 0.0, 0.71] # x,y,z [m]
     rot: [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
     vLinear: [0.0, 0.0, 0.0] # x,y,z [m/s]
     vAngular: [0.0, 0.0, 0.0] # x,y,z [rad/s]
@@ -155,7 +155,7 @@ env:
       HFE: 1.9
       HFE_min: -0.2
       HAA: 0.2
-      min_base_height: 0.8
+      min_base_height: 0.6
       heading: 0.1
 
     # Other

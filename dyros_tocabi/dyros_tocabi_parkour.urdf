@@ -1288,124 +1288,72 @@
       damping="5" />
   </joint>
   
-  <link
-    name="Neck_Link">
+  <link name="Neck_Link">
     <inertial>
-      <origin
-        xyz="-0.0004 -0.002 0.02576"
-        rpy="0 0 0" />
-      <mass
-        value="0.404" />
+      <origin xyz="-0.0004 -0.002 0.02576" rpy="0 0 0" />
+      <mass value="0.404" />
       <inertia
-        ixx="0.000058259"
-        ixy="-0.000000076"
-        ixz="0.000000268"
-        iyy="0.000036489"
-        iyz="-0.000001002"
-        izz="0.000058237" />
+        ixx="0.000058259" ixy="-0.000000076" ixz="0.000000268"
+        iyy="0.000036489" iyz="-0.000001002" izz="0.000058237" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="meshes/neck.STL" />
+        <mesh filename="meshes/neck.STL" />
       </geometry>
-      <material
-        name="">
-        <color
-          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      <material name="">
+        <color rgba="0.20313 0.20313 0.20313 1" />
       </material>
     </visual>
-	<collision>
-      <origin
-        xyz="0 0 0.05"
-        rpy="0 0 0" />
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0" />
       <geometry>
         <cylinder length="0.043" radius="0.07"/>
       </geometry>
     </collision>
   </link>
-  <joint
-    name="Neck_Joint"
-    type="revolute">
-    <origin
-      xyz="-0.036 0.0 0.3795"
-      rpy="0 0 0" />
-    <parent
-      link="Upperbody_Link" />
-    <child
-      link="Neck_Link" />
-    <axis
-      xyz="0 0 1" />
-    <limit
-      lower="-1.54"
-      upper="1.54"
-      effort="500"
-      velocity="100" />
-	<dynamics
-      damping="5" />
+
+  <joint name="Neck_Joint" type="revolute">
+    <origin xyz="-0.036 0 0.3795" rpy="0 0 0" />
+    <parent link="Upperbody_Link" />
+    <child link="Neck_Link" />
+    <axis xyz="0 0 1" />
+    <limit lower="-1.54" upper="1.54" effort="500" velocity="100" />
+    <dynamics damping="5" />
   </joint>
 
-  <link
-    name="Head_Link">
+  <link name="Head_Link">
     <inertial>
-      <origin
-        xyz="0.0372 0 0.0708"
-        rpy="0 0 0" />
-      <mass
-        value="1.417" />
+      <origin xyz="0.0372 0 0.0708" rpy="0 0 0" />
+      <mass value="1.417" />
       <inertia
-        ixx="0.0079"
-        ixy="0.0"
-        ixz="0.0025"
-        iyy="0.012"
-        iyz="0.0"
-        izz="0.01" />
+        ixx="0.0079" ixy="0.0" ixz="0.0025"
+        iyy="0.012" iyz="0.0" izz="0.01" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0.02 0 -0.6" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="meshes/head.STL" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/head.STL" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material
-        name="">
-        <color
-          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      <material name="">
+        <color rgba="0.85938 0.07813 0.23438 1" />
       </material>
     </visual>
-	<collision>
-      <origin
-        xyz="0 0 0.05"
-        rpy="0 0 0" />
+    <collision>
+      <origin xyz="0.02 0 0.14" rpy="0 0 0" />
       <geometry>
-        <cylinder length="0.043" radius="0.07"/>
+        <box size="0.16 0.12 0.172" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="Head_Joint"
-    type="revolute">
-    <origin
-      xyz="0.0 0.0 0.0275"
-      rpy="0 0 0" />
-    <parent
-      link="Neck_Link" />
-    <child
-      link="Head_Link" />
-    <axis
-      xyz="0 1 0" />
-    <limit
-      lower="-1.54"
-      upper="1.54"
-      effort="500"
-      velocity="100" />
-	<dynamics
-      damping="5" />
+
+  <joint name="Head_Joint" type="revolute">
+    <origin xyz="0 0 0.0275" rpy="0 0 0" />
+    <parent link="Neck_Link" />
+    <child link="Head_Link" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.54" upper="1.54" effort="500" velocity="100" />
+    <dynamics damping="5" />
   </joint>
   
     <link

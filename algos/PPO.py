@@ -107,7 +107,7 @@ class ExtractObsWrapper(gym.ObservationWrapper):
         return obs["obs"]
 
 def PPO(cfg: DictConfig, envs):
-    run_path = f"runs/{cfg['train']['params']['config']['name']}_{datetime.now().strftime('%d-%H-%M-%S')}"
+    run_path = f"runs/{cfg['train']['params']['config']['name']}_{datetime.now().strftime('%m-%d-%H-%M-%S')}"
 
     writer = SummaryWriter(run_path)
     if not os.path.exists(run_path):

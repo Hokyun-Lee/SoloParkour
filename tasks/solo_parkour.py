@@ -188,7 +188,7 @@ class SoloParkour(VecTask):
         self.foot_velocities = self.rigid_body_state.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
         # TODO: Find a way to have these two keep the view like dof_pos and dof_vel to avoid having to update them manually
 
-        print("Self Feet Indices: ", self.feet_indices)
+        # print("Self Feet Indices: ", self.feet_indices)
 
         # Initialize some data and tensors used later on
         self.common_step_counter = 0
@@ -526,6 +526,11 @@ class SoloParkour(VecTask):
         # Add noise to observation sample
         if self.add_noise:
             obs_meas += (2 * torch.rand_like(obs_meas) - 1) * self.noise_scale_vec
+
+        print("Obs Meas: ", obs_meas)
+        print("Obs Meas Shape: ", obs_meas.shape)
+        print("self.noise_scale_vec: ", self.noise_scale_vec)
+        print("self.noise_scale_vec Shape: ", self.noise_scale_vec.shape)
 
         # Refresh history of observation for envs that have just been reset
         resetted = (self.progress_buf == 1)
@@ -1115,8 +1120,8 @@ class SoloParkour(VecTask):
                 10.0,  # Hard lower limit on torques
             )
 
-            print("torques", torques)
-            print("torques.shape", torques.shape)
+            # print("torques", torques)
+            # print("torques.shape", torques.shape)
 
             # Saturating command torques (on Solo we saturate the max currents)
             # torques = torch.clamp(torques, -3.5, 3.5)
