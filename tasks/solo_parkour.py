@@ -527,10 +527,10 @@ class SoloParkour(VecTask):
         if self.add_noise:
             obs_meas += (2 * torch.rand_like(obs_meas) - 1) * self.noise_scale_vec
 
-        print("Obs Meas: ", obs_meas)
-        print("Obs Meas Shape: ", obs_meas.shape)
-        print("self.noise_scale_vec: ", self.noise_scale_vec)
-        print("self.noise_scale_vec Shape: ", self.noise_scale_vec.shape)
+        # print("Obs Meas: ", obs_meas)
+        # print("Obs Meas Shape: ", obs_meas.shape)
+        # print("self.noise_scale_vec: ", self.noise_scale_vec)
+        # print("self.noise_scale_vec Shape: ", self.noise_scale_vec.shape)
 
         # Refresh history of observation for envs that have just been reset
         resetted = (self.progress_buf == 1)

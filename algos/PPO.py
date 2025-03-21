@@ -15,6 +15,8 @@ import torch.optim as optim
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
 
+import wandb
+
 class RunningMeanStd(nn.Module):
     def __init__(self, shape = (), epsilon=1e-08):
         super(RunningMeanStd, self).__init__()

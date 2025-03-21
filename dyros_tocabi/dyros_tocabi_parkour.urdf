@@ -34,7 +34,7 @@
         xyz="0.11 0 0.039"
         rpy="0 0 0" />
       <geometry>
-		<cylinder length="0.088" radius="0.045"/>
+		<cylinder length="0.044" radius="0.045"/>
       </geometry>
     </collision>
 	<collision>
