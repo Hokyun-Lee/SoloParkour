@@ -62,7 +62,8 @@ env:
     # action scale: target angle = actionScale * action + defaultAngle
     actionScale: 0.5
     # decimation: Number of control action updates @ sim DT per policy DT
-    decimation: 4
+    # decimation: 4
+    decimation: 5
     damping_curriculum:
       enable: False
       num_steps: 400000
@@ -138,7 +139,8 @@ env:
     # Constraints
     enableConstraints: "cat"  # "none", "cat"
     constraints_CaT:
-      feetAirTimeConstraint: 0.2
+      # feetAirTimeConstraint: 0.2
+      feetAirTimeConstraint: 0.6
       tauConstraint: 0.95
       minPConstraint: 0.0
       softPConstraint: 0.1
@@ -179,7 +181,7 @@ env:
     measured_points_x: [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     measured_points_y: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]
     # phases_freq: 2.0
-    phases_freq: 1.0
+    phases_freq: 0.55
 
     # normalization
     linearVelocityScale: 2.0
@@ -200,11 +202,13 @@ env:
     heightMeasurementNoise: 0.01
 
     # friction randomization
-    randomizeFriction: true
+    # randomizeFriction: true
+    randomizeFriction: false
     frictionRange: [0.5, 1.25]
 
     # random pushes during training
-    pushRobots: true
+    # pushRobots: true
+    pushRobots: false
     pushInterval_s: 8
 
     # episode length in seconds
@@ -230,8 +234,8 @@ env:
 
 sim:
   # dt: 0.005
-  dt: 0.002
-  substeps: 2
+  dt: 0.002 # simulation in 500Hz, decimation: 5  -> policy in 100Hz
+  substeps: 1
   up_axis: "z"
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
   gravity: [0.0, 0.0, -9.81]
@@ -241,18 +245,26 @@ sim:
     use_gpu: ${contains:"cuda",${....sim_device}} # set to False to run on CPU
     num_position_iterations: 4
     num_velocity_iterations: 1
+
     contact_offset: 0.02
     # rest_offset: 0.0
     # bounce_threshold_velocity: 0.2
-    # max_depenetration_velocity: 100.0
+    # # max_depenetration_velocity: 100.0
     # default_buffer_size_multiplier: 5.0
     # max_gpu_contact_pairs: 33554432 # 8388608 = 8*1024*1024
-    # num_subscenes: ${....num_subscenes}contact_offset: 0.002
+    # # max_gpu_contact_pairs: 8388608 # 8388608 = 8*1024*1024
+    # max_gpu_contact_pairs: 70000000 # 8388608 = 8*1024*1024
+
+    num_subscenes: ${....num_subscenes}
+    
+    # contact_offset: 0.002
     rest_offset: 0.0
     bounce_threshold_velocity: 0.04
     max_depenetration_velocity: 10.0
     default_buffer_size_multiplier: 5.0
-    max_gpu_contact_pairs: 8388608 # 8*1024*1024
+    # max_gpu_contact_pairs: 8388608 # 8*1024*1024
+    max_gpu_contact_pairs: 33554432 # 32*1024*1024
+
     contact_collection: 1 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (broken - do not use!)
 
 task:

@@ -885,63 +885,73 @@ class TocabiParkour(VecTask):
         yaw_diff = torch.atan2(torch.sin(yaw_quat - yaw_command), torch.cos(yaw_quat - yaw_command))
         angle = torch.abs(yaw_diff)
 
-        cstr_heading = (angle-self.limits["heading"]).clamp(max=1.5)* (torch.norm(self.base_lin_vel[:, :2], dim=1) > 0.1).float()
+        # cstr_heading = (angle-self.limits["heading"]).clamp(max=1.5)* (torch.norm(self.base_lin_vel[:, :2], dim=1) > 0.1).float()
 
-        # heading hard constraint (to avoid rapid spinning)
-        cstr_heading_hard = (angle-1.5) * (torch.norm(self.base_lin_vel[:, :2], dim=1) > 0.1).float()
+        # # heading hard constraint (to avoid rapid spinning)
+        # cstr_heading_hard = (angle-1.5) * (torch.norm(self.base_lin_vel[:, :2], dim=1) > 0.1).float()
 
-        # ------------ Soft constraints ----------------
+        # # ------------ Soft constraints ----------------
 
-        # Torque constraint
-        cstr_torque = torch.abs(self.torques) - self.limits["torque"]
+        # # Torque constraint
+        # cstr_torque = torch.abs(self.torques) - self.limits["torque"]
 
-        # Joint velocity constraint
-        cstr_joint_vel = torch.abs(self.dof_vel) - self.limits["vel"]
+        # # Joint velocity constraint
+        # cstr_joint_vel = torch.abs(self.dof_vel) - self.limits["vel"]
 
-        # Joint acceleration constraint
-        cstr_joint_acc = torch.abs(self.last_dof_vel[:, :, 0] - self.dof_vel) / self.dt - self.limits["acc"]
+        # # Joint acceleration constraint
+        # cstr_joint_acc = torch.abs(self.last_dof_vel[:, :, 0] - self.dof_vel) / self.dt - self.limits["acc"]
 
-        # Action rate constraint (for command smoothness)
-        cstr_action_rate = torch.abs(self.actions - self.last_actions[:, :, 0]) / self.dt - self.limits["action_rate"]
+        # # Action rate constraint (for command smoothness)
+        # cstr_action_rate = torch.abs(self.actions - self.last_actions[:, :, 0]) / self.dt - self.limits["action_rate"]
 
-        # ------------ Hard constraints ----------------
+        # # ------------ Hard constraints ----------------
 
-        # Knee contact constraint
-        cstr_knee_contact = torch.norm(self.contact_forces[:, self.knee_indices, :], dim=2)
+        # # Knee contact constraint
+        # cstr_knee_contact = torch.norm(self.contact_forces[:, self.knee_indices, :], dim=2)
 
-        # Base contact constraint
-        cstr_base_contact = torch.norm(self.contact_forces[:, self.base_index, :], dim=1)
+        # # Base contact constraint
+        # cstr_base_contact = torch.norm(self.contact_forces[:, self.base_index, :], dim=1)
 
-        # Foot contact force constraint
-        cstr_foot_contact = torch.norm(self.contact_forces[:, self.grf_indices], dim=2) - self.limits["foot_contact_force"]
+        # # Foot contact force constraint
+        # cstr_foot_contact = torch.norm(self.contact_forces[:, self.grf_indices], dim=2) - self.limits["foot_contact_force"]
 
-        # Stumbling constraint
-        cstr_foot_stumble = torch.norm(self.contact_forces[:, self.grf_indices, :2], dim=2) - 4.0 * torch.abs(self.contact_forces[:, self.grf_indices, 2])
+        # # Stumbling constraint
+        # cstr_foot_stumble = torch.norm(self.contact_forces[:, self.grf_indices, :2], dim=2) - 4.0 * torch.abs(self.contact_forces[:, self.grf_indices, 2])
 
-        # Constraint on the two front HFE joints
-        cstr_HFE = self.dof_pos[:, [1, 4]] - self.limits["HFE"]
-        cstr_HFE_min = self.limits["HFE_min"] - self.dof_pos[:, [1, 4]]
-        cstr_HFE_style = self.dof_pos[:, [1, 4, 7, 10]] - 1.3
+        # # Constraint on the two front HFE joints
+        # cstr_HFE = self.dof_pos[:, [1, 4]] - self.limits["HFE"]
+        # cstr_HFE_min = self.limits["HFE_min"] - self.dof_pos[:, [1, 4]]
+        # cstr_HFE_style = self.dof_pos[:, [1, 4, 7, 10]] - 1.3
 
-        # Constraint on the two back HFE joints
-        cstr_H_HFE = self.dof_pos[:, [7, 10]] - 1.9
+        # # Constraint on the two back HFE joints
+        # cstr_H_HFE = self.dof_pos[:, [7, 10]] - 1.9
 
-        # Constraint on the KFE (knee) joints
-        cstr_KFE = self.dof_pos[:, [2, 5, 8, 11]]
-        cstr_KFE_min = -2.8 - self.dof_pos[:, [2, 5, 8, 11]]
+        # Constraint on the two Ankle joints (TOCABI)
+        cstr_Ankle_p = self.dof_pos[:, [4, 10]] - (-0.15)
+        cstr_Ankle_p_min = -0.3 - self.dof_pos[:, [4, 10]]
+        cstr_Ankle_style = self.dof_pos[:, [4, 10]] - 0.35
 
-        # Hip constraint (style constraint on HAA joint)
-        cstr_HAA = torch.abs(self.dof_pos[:, [0, 3, 6, 9]] - self.default_dof_pos[:, [0, 3, 6, 9]]) - self.limits["HAA"]
+        # # Constraint on the KFE (knee) joints
+        # cstr_KFE = self.dof_pos[:, [2, 5, 8, 11]]
+        # cstr_KFE_min = -2.8 - self.dof_pos[:, [2, 5, 8, 11]]
 
-        # Constraint to avoid having the robot upside-down
-        cstr_upsidedown = self.projected_gravity[:, 2] > 0
+        # # Hip constraint (style constraint on HAA joint)
+        # cstr_HAA = torch.abs(self.dof_pos[:, [0, 3, 6, 9]] - self.default_dof_pos[:, [0, 3, 6, 9]]) - self.limits["HAA"]
 
-        # Constraint to not fall outside of the tracj
-        cstr_lava = self.root_states[:, 2] < -0.05
+        # # Constraint to avoid having the robot upside-down
+        # cstr_upsidedown = self.projected_gravity[:, 2] > 0
+
+        # # Constraint to not fall outside of the tracj
+        # cstr_lava = self.root_states[:, 2] < -0.05
 
         cstr_minbaseheight = (self.limits["min_base_height"] - self.root_states[:, 2]) * (self.ceilings >= 1.81).float()
 
-        cstr_foot_stumble = torch.norm(self.contact_forces[:, self.grf_indices, :2], dim=2) - 4.0*torch.abs(self.contact_forces[:, self.grf_indices, 2])
+        # cstr_foot_stumble = torch.norm(self.contact_forces[:, self.grf_indices, :2], dim=2) - 4.0*torch.abs(self.contact_forces[:, self.grf_indices, 2])
+
+        # Base height Termination
+        cstr_base_height_hard = self.root_states[:, 2] < 0.5
+        # print("cstr_base_height_hard", cstr_base_height_hard)
+        # print("self.root_states[:, 3]", self.root_states[:, 2])
 
         # ------------ Style constraints ----------------
 
@@ -956,21 +966,24 @@ class TocabiParkour(VecTask):
         # Constraint to stand still when the velocity command is 0 (style constraint)
         cstr_nomove = (torch.abs(self.dof_vel) - 2.0) *(torch.norm(self.commands[:, :2], dim=1) < self.vel_deadzone).float().unsqueeze(1)
 
-        # Constraint to have exactly 2 feet in contact with the ground at any time when walking (style constraint)
-        cstr_2footcontact = torch.abs((self.contact_forces[:, self.grf_indices, 2] > 1.0).sum(1) - 2.0)
+        # # Constraint to have exactly 2 feet in contact with the ground at any time when walking (style constraint)
+        # cstr_2footcontact = torch.abs((self.contact_forces[:, self.grf_indices, 2] > 1.0).sum(1) - 2.0)
+        cstr_1or2footcontact = ((self.contact_forces[:, self.grf_indices, 2] > 1.0).sum(1) == 0).float()
 
-        # Apply aesthetics constraints only on flat terrains
-        self.is_flat_terrain = (((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.60)) | (self.terrain_levels <= 1)).float()
+        # # Apply aesthetics constraints only on flat terrains
+        # self.is_flat_terrain = (((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.60)) | (self.terrain_levels <= 1)).float()
 
-        cstr_base_orientation *= self.is_flat_terrain
+        # cstr_base_orientation *= self.is_flat_terrain
 
-        # We impose a certain walking style on flat surfaces to make the robot walk very nicely
+        # # We impose a certain walking style on flat surfaces to make the robot walk very nicely
         command_vel = torch.norm(self.commands[:, :2], dim=1)
-        cstr_2footcontact *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.60)).float()
-        cstr_2footcontact *= (command_vel > self.vel_deadzone).float()
+        # cstr_2footcontact *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.60)).float()
+        cstr_1or2footcontact *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 1.81)).float()
+        # cstr_2footcontact *= (command_vel > self.vel_deadzone).float()
+        cstr_1or2footcontact *= (command_vel > self.vel_deadzone).float()
 
-        cstr_HFE_style *= ((self.ceilings >= 0.60) & (self.terrain_levels <= 4)).unsqueeze(1).float()
-        cstr_nomove *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 0.60)).float().unsqueeze(1)
+        # cstr_HFE_style *= ((self.ceilings >= 0.60) & (self.terrain_levels <= 4)).unsqueeze(1).float()
+        cstr_nomove *= ((self.measured_heights.var(1) < self.flat_terrain_threshold) & (self.ceilings >= 1.81)).float().unsqueeze(1)
 
         # ------------ Applying constraints ----------------
 
@@ -1010,7 +1023,7 @@ class TocabiParkour(VecTask):
         self.cstr_manager.add("min_base_height", sqrt_func(cstr_minbaseheight), max_p=1.0)
 
         # # Joint constraints
-        # soft_p_joint = soft_p 
+        soft_p_joint = soft_p 
         # self.cstr_manager.add("HFE", sqrt_func(cstr_HFE), max_p=soft_p_joint)
         # self.cstr_manager.add("HFE_min", sqrt_func(cstr_HFE_min), max_p=soft_p_joint)
         # self.cstr_manager.add("HFE_style", sqrt_func(cstr_HFE_style), max_p=soft_p_joint)
@@ -1019,13 +1032,19 @@ class TocabiParkour(VecTask):
         # self.cstr_manager.add("H_HFE", sqrt_func(cstr_H_HFE), max_p=soft_p_joint)
         # self.cstr_manager.add("HAA", sqrt_func(cstr_HAA), max_p=soft_p_joint)
 
+        # self.cstr_manager.add("Ankle_p", sqrt_func(cstr_Ankle_p), max_p=soft_p_joint)
+        # self.cstr_manager.add("Ankle_p_min", sqrt_func(cstr_Ankle_p_min), max_p=soft_p_joint)
+        self.cstr_manager.add("Ankle_style", sqrt_func(cstr_Ankle_style), max_p=soft_p_joint)
+
+
         # # Style constraints
         self.cstr_manager.add("base_ori", sqrt_func(cstr_base_orientation), max_p=soft_p)
         self.cstr_manager.add("base_ori_x", sqrt_func(cstr_base_orientation_x), max_p=m_soft_p)
 
         self.cstr_manager.add("air_time", cstr_air_time, max_p=soft_p)
-        # self.cstr_manager.add("no_move", sqrt_func(cstr_nomove), max_p=soft_p)
+        self.cstr_manager.add("no_move", sqrt_func(cstr_nomove), max_p=soft_p)
         # self.cstr_manager.add("2footcontact", cstr_2footcontact, max_p=soft_p)
+        self.cstr_manager.add("1or2footcontact", cstr_1or2footcontact, max_p=soft_p)
 
         self.cstr_manager.log_all(self.episode_sums)
 
@@ -1038,7 +1057,8 @@ class TocabiParkour(VecTask):
         # Probability of termination used to affect the discounted sum of rewards
         self.reset_buf = self.cstr_prob
 
-        self.reset_env_buf = timeout | cstr_upsidedown | cstr_lava
+        # self.reset_env_buf = timeout | cstr_upsidedown | cstr_lava | cstr_base_height_hard
+        self.reset_env_buf = timeout | cstr_base_height_hard
 
         # Store quantities for off-policy CaT
         self.extras["true_dones"] = self.reset_env_buf
@@ -1288,7 +1308,7 @@ class TocabiParkour(VecTask):
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(torques))
             # self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(stop_torque))
             # self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(zero_torque))
-            self.torques = torques[:,:12].view(self.torques.shape)
+            # self.torques = torques[:,:12].view(self.torques.shape)
             self.gym.simulate(self.sim)
             if self.device == 'cpu':
                 self.gym.fetch_results(self.sim, True)

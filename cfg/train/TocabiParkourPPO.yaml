@@ -19,7 +19,11 @@ params:
           name: default
         sigma_init:
           name: const_initializer
-          val: 0. # std = 1.
+          # val: 0. # std = 1.
+          val: -1.609438 # ln(1/5)
+        sigma_last:
+          name: const_initializer
+          val: -2.995732
         fixed_sigma: True
 
     mlp:
@@ -67,8 +71,14 @@ params:
     kl_threshold: 0.008 # target kl for adaptive lr
     truncate_grads: True
     grad_norm: 1.
-    horizon_length: 24 # 24 for t = 0.02 (decimation = 4)
-    minibatch_size: 16384 # 16384 for horizon_length 24
+    # horizon_length: 24 # 24 for t = 0.02 (decimation = 4)
+    # minibatch_size: 16384 # 16384 for horizon_length 24
+    # horizon_length: 128    # DH: u may play with this
+    horizon_length: 64    # HK: Total time step is 0.64s
+    # minibatch_size: 8192  # HK: minbatch num is 32 (= 4096 * 64 / 8192)
+    # minibatch_size: 65536  # HK: minbatch num is 32 (= 4096 * 64 / 8192)
+    # minibatch_size: 4096  # DH: u may play with this (num_envs*horizon_length/mini_batch_size should be minibatch_size!!!!!!!!!!)
+    minibatch_size: 16384
     mini_epochs: 5
     critic_coef: 2
     clip_value: True
