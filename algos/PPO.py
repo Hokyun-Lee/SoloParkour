@@ -88,6 +88,8 @@ class Agent(nn.Module):
             layer_init(nn.Linear(128, np.prod(envs.single_action_space.shape)), std=0.01),
         )
         self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(envs.single_action_space.shape)))
+        # self.actor_logstd = nn.Parameter(torch.ones(1, np.prod(envs.single_action_space.shape)) * np.log(1/5))
+        
 
         self.obs_rms = RunningMeanStd(shape = envs.single_observation_space.shape)
         self.value_rms = RunningMeanStd(shape = ())
@@ -115,6 +117,23 @@ def PPO(cfg: DictConfig, envs):
     if not os.path.exists(run_path):
         os.makedirs(run_path)
     OmegaConf.save(config = cfg, f = f"{run_path}/config.yaml")
+
+    wandb_activate = cfg["train"]["params"]["config"]["wandb_activate"]
+
+    if wandb_activate:
+        wandb_update_freq = cfg["train"]["params"]["config"]["wandb_update_freq"]
+        # wandb.init(project=self.config['name'], name=run_name, tensorboard = False)
+        os.environ['WANDB_API_KEY'] = "1f8271a896a0ea1767969d081a30539e115fc2de"
+        assert(os.environ['WANDB_API_KEY'] is not None)
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_name = f"{current_time}_{cfg['train']['params']['config']['run_name']}"
+        wandb.init(project=cfg["train"]["params"]["config"]["name"], name = run_name, tensorboard = False)
+        if(cfg["train"]["params"]["config"]["name"]=='TocabiParkour'):
+                    wandb.save(os.path.join(os.getcwd(), 'algos/PPO.py'), policy="now")
+                    wandb.save(os.path.join(os.getcwd(), 'cfg/task/TocabiParkour.yaml'), policy="now")
+                    wandb.save(os.path.join(os.getcwd(), 'cfg/train/TocabiParkourPPO.yaml'), policy="now")
+                    wandb.save(os.path.join(os.getcwd(), 'tasks/tocabi_parkour.py'), policy="now")
+                    wandb.save(os.path.join(os.getcwd(), 'tasks/terrainTocabiParkour.py'), policy="now")
 
     LEARNING_RATE = cfg["train"]["params"]["config"]["learning_rate"]
     NUM_STEPS = cfg["train"]["params"]["config"]["horizon_length"]
@@ -277,6 +296,36 @@ def PPO(cfg: DictConfig, envs):
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), MAX_GRAD_NORM)
+
+                ########## WandB logging ##########
+                if wandb_activate:
+                    if iteration % wandb_update_freq == 0 or iteration == 1:
+                        # 리워드 로깅
+                        for el, v in zip(list(envs.episode_sums.keys())[:envs.numRewards], (torch.mean(envs.rew_mean_reset, dim=0)).tolist()):
+                            wandb.log({f"reward/{el}": v}, step=iteration)
+
+                        # print("envs.env.__dict__.keys()", envs.env.__dict__.keys())
+                        wandb.log({
+                            "reward/cumlated_rewards": (torch.sum(torch.mean(envs.rew_cum_reset, dim=0))).item(),
+                            "reward/avg_terrain_levels": envs.terrain_levels.float().mean().item(),
+                            "reward/length_mean": envs.env.progress_buf.float().mean().item()
+                        }, step=iteration)
+
+                        # 컨스트레인트 로깅
+                        for el, v in zip(envs.cstr_manager.get_names(), (100.0 * torch.mean(envs.cstr_mean_reset, dim=0)).tolist()):
+                            wandb.log({f"cstr/{el}": v}, step=iteration)
+                        
+                        # 로스, KL 로깅
+                        wandb.log({
+                            "train/policy_loss": pg_loss.item(),
+                            "train/value_loss": v_loss.item(),
+                            "train/entropy_loss": entropy_loss.item(),
+                            "train/total_loss": loss.item(),
+                            "train/approx_kl": approx_kl.item(),
+                            "train/clip_fraction": np.mean(clipfracs)
+                        }, step=iteration)
+                ###################################
+
                 optimizer.step()
 
         if (iteration + 1) % 24 == 0:

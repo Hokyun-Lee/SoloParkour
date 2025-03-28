@@ -50,10 +50,14 @@ env:
     vAngular: [0.0, 0.0, 0.0] # x,y,z [rad/s]
 
   randomCommandVelocityRanges:
-    # train
+    # # train
     linear_x: [0.0, 0.6] # min max [m/s] # -0.3 1.0
-    linear_y: [-0.4, 0.4] # min max [m/s]
-    yaw: [-0.3, 0.3] # min max [rad/s]
+    linear_y: [-0.3, 0.3] # min max [m/s]
+    yaw: [-0.2, 0.2] # min max [rad/s]
+    # train
+    # linear_x: [0.0, 0.2] # min max [m/s] # -0.3 1.0
+    # linear_y: [-0.0, 0.0] # min max [m/s]
+    # yaw: [-0.0, 0.0] # min max [rad/s]
 
   control:
     # PD Drive parameters:
@@ -132,15 +136,16 @@ env:
     survivalBonus: 0.5
 
     # Misc quantities for rewards
-    linearVelocityXYRewardDelta: 0.25
-    angularVelocityZRewardDelta: 0.25
-    feetAirTimeRewardTarget: 0.25
+    # linearVelocityXYRewardDelta: 0.25
+    # angularVelocityZRewardDelta: 0.25
+    # feetAirTimeRewardTarget: 0.25
 
     # Constraints
     enableConstraints: "cat"  # "none", "cat"
     constraints_CaT:
       # feetAirTimeConstraint: 0.2
       feetAirTimeConstraint: 0.6
+      # feetAirTimeConstraint: 0.35
       tauConstraint: 0.95
       minPConstraint: 0.0
       softPConstraint: 0.1
@@ -149,11 +154,15 @@ env:
 
     limits:
       torque: 3.0
-      acc: 800.0
-      vel: 16.0
-      action_rate: 80.0
+      # acc: 800.0
+      acc: 400.0 #TOCABI
+      # vel: 16.0
+      vel: 4.03 #TOCABI
+      # action_rate: 80.0
+      action_rate: 160.0 #TOCABI
       base_orientation: 0.1
-      foot_contact_force: 80.0
+      # foot_contact_force: 80.0
+      foot_contact_force: 1400.0
       HFE: 1.9
       HFE_min: -0.2
       HAA: 0.2
@@ -182,12 +191,14 @@ env:
     measured_points_y: [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]
     # phases_freq: 2.0
     phases_freq: 0.55
+    # phases_freq: 1.0
 
     # normalization
     linearVelocityScale: 2.0
     angularVelocityScale: 0.25
     dofPositionScale: 1.0
-    dofVelocityScale: 0.05
+    # dofVelocityScale: 0.05
+    dofVelocityScale: 0.5 #TOCABI
     heightMeasurementScale: 5.0
     imuAccelerationScale: 0.1
 

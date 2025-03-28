@@ -1,3 +1,4 @@
 runs/
 utils/tasks/__pycache__/
-algos/
+wandb/
+tasks/__pycache__/

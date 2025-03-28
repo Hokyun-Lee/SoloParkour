@@ -48,7 +48,8 @@ params:
   load_path: ${...checkpoint} # path to the checkpoint to load
 
   config:
-    name: TocabiParkourPPO
+    name: TocabiParkour
+    run_name: ${....run_name}
     full_experiment_name: ${.name}
     env_name: rlgpu
     ppo: True
@@ -65,8 +66,10 @@ params:
     gamma: 0.99
     tau: 0.95
     e_clip: 0.2
-    entropy_coef: 0.001
+    # entropy_coef: 0.001
+    entropy_coef: 0.01
     learning_rate: 3.e-4 # overwritten by adaptive lr_schedule
+    # learning_rate: 5.e-4 # overwritten by adaptive lr_schedule
     lr_schedule: adaptive
     kl_threshold: 0.008 # target kl for adaptive lr
     truncate_grads: True
@@ -86,11 +89,17 @@ params:
     bounds_loss_coef: 0.
     kappa: 1.0
 
-    max_epochs: ${resolve_default:20000,${....max_iterations}}
-    save_best_after: 1000
+    # max_epochs: ${resolve_default:20000,${....max_iterations}}
+    max_epochs: ${resolve_default:5000,${....max_iterations}}
+    # save_best_after: 1000
+    save_best_after: 200
     score_to_win: 2000000000
-    save_frequency: 1000
+    # save_frequency: 1000
+    save_frequency: 200
     print_stats: False
+
+    wandb_activate: True # True, False
+    wandb_update_freq: 10
 
     player:
       deterministic: True
