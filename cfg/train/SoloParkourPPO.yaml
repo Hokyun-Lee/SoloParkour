@@ -82,6 +82,8 @@ params:
     save_frequency: 1000
     print_stats: False
 
+    wandb_activate: False
+
     player:
       deterministic: True
       use_vecenv: True

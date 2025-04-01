@@ -13,9 +13,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.normal import Normal
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 import wandb
+from torch.cuda.amp import autocast, GradScaler
 
 class RunningMeanStd(nn.Module):
     def __init__(self, shape = (), epsilon=1e-08):
@@ -87,8 +88,8 @@ class Agent(nn.Module):
             nn.ELU(),
             layer_init(nn.Linear(128, np.prod(envs.single_action_space.shape)), std=0.01),
         )
-        self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(envs.single_action_space.shape)))
-        # self.actor_logstd = nn.Parameter(torch.ones(1, np.prod(envs.single_action_space.shape)) * np.log(1/5))
+        # self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(envs.single_action_space.shape)))
+        self.actor_logstd = nn.Parameter(torch.ones(1, np.prod(envs.single_action_space.shape)) * np.log(1/10))
         
 
         self.obs_rms = RunningMeanStd(shape = envs.single_observation_space.shape)
@@ -113,7 +114,7 @@ class ExtractObsWrapper(gym.ObservationWrapper):
 def PPO(cfg: DictConfig, envs):
     run_path = f"runs/{cfg['train']['params']['config']['name']}_{datetime.now().strftime('%m-%d-%H-%M-%S')}"
 
-    writer = SummaryWriter(run_path)
+    # writer = SummaryWriter(run_path)
     if not os.path.exists(run_path):
         os.makedirs(run_path)
     OmegaConf.save(config = cfg, f = f"{run_path}/config.yaml")
@@ -129,11 +130,17 @@ def PPO(cfg: DictConfig, envs):
         run_name = f"{current_time}_{cfg['train']['params']['config']['run_name']}"
         wandb.init(project=cfg["train"]["params"]["config"]["name"], name = run_name, tensorboard = False)
         if(cfg["train"]["params"]["config"]["name"]=='TocabiParkour'):
-                    wandb.save(os.path.join(os.getcwd(), 'algos/PPO.py'), policy="now")
-                    wandb.save(os.path.join(os.getcwd(), 'cfg/task/TocabiParkour.yaml'), policy="now")
-                    wandb.save(os.path.join(os.getcwd(), 'cfg/train/TocabiParkourPPO.yaml'), policy="now")
-                    wandb.save(os.path.join(os.getcwd(), 'tasks/tocabi_parkour.py'), policy="now")
-                    wandb.save(os.path.join(os.getcwd(), 'tasks/terrainTocabiParkour.py'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'algos/PPO.py'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'cfg/task/TocabiParkour.yaml'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'cfg/train/TocabiParkourPPO.yaml'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'tasks/tocabi_parkour.py'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'tasks/terrainTocabiParkour.py'), policy="now")
+        elif(cfg["train"]["params"]["config"]["name"]=='SoloParkour'):
+            wandb.save(os.path.join(os.getcwd(), 'algos/PPO.py'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'cfg/task/SoloParkour.yaml'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'cfg/train/SoloParkourPPO.yaml'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'tasks/solo_parkour.py'), policy="now")
+            wandb.save(os.path.join(os.getcwd(), 'tasks/terrainParkour.py'), policy="now")
 
     LEARNING_RATE = cfg["train"]["params"]["config"]["learning_rate"]
     NUM_STEPS = cfg["train"]["params"]["config"]["horizon_length"]
@@ -148,7 +155,8 @@ def PPO(cfg: DictConfig, envs):
     MAX_GRAD_NORM = cfg["train"]["params"]["config"]["grad_norm"]
     NORM_ADV = cfg["train"]["params"]["config"]["normalize_advantage"]
     CLIP_VLOSS = cfg["train"]["params"]["config"]["clip_value"]
-    ANNEAL_LR = True
+    # ANNEAL_LR = True
+    ANNEAL_LR = False
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -161,6 +169,9 @@ def PPO(cfg: DictConfig, envs):
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=LEARNING_RATE, eps=1e-5)
+
+    # Initialize scaler outside the training loop
+    scaler = GradScaler()
 
     obs = torch.zeros((NUM_STEPS, envs.num_envs) + envs.single_observation_space.shape, dtype=torch.float).to(device)
     actions = torch.zeros((NUM_STEPS, envs.num_envs) + envs.single_action_space.shape, dtype=torch.float).to(device)
@@ -180,6 +191,8 @@ def PPO(cfg: DictConfig, envs):
     next_true_done = torch.zeros(envs.num_envs, dtype=torch.float).to(device)
 
     for iteration in range(1, NUM_ITERATIONS + 1):
+        current_time = time.time()
+
         if ANNEAL_LR:
             frac = 1.0 - (iteration - 1.0) / NUM_ITERATIONS
             lrnow = frac * LEARNING_RATE
@@ -202,17 +215,18 @@ def PPO(cfg: DictConfig, envs):
             next_obs, rewards[step], next_done, info = envs.step(action)
             next_obs = agent.obs_rms(next_obs)
             next_true_done = info["true_dones"].float()
+
             if "time_outs" in info:
                 if info["time_outs"].any():
                     print("time outs", info["time_outs"].sum())
                     exit(0)
 
-        for el, v in zip(list(envs.episode_sums.keys())[:envs.numRewards], (torch.mean(envs.rew_mean_reset, dim=0)).tolist()):
-            writer.add_scalar(f"reward/{el}", v, iteration)
-        writer.add_scalar(f"reward/cum_rew", (torch.sum(torch.mean(envs.rew_cum_reset, dim=0))).item(), iteration)
-        writer.add_scalar(f"reward/avg_rew", envs.terrain_levels.float().mean().item(), iteration)
-        for el, v in zip(envs.cstr_manager.get_names(), (100.0 * torch.mean(envs.cstr_mean_reset, dim=0)).tolist()):
-            writer.add_scalar(f"cstr/{el}", v, iteration)
+        # for el, v in zip(list(envs.episode_sums.keys())[:envs.numRewards], (torch.mean(envs.rew_mean_reset, dim=0)).tolist()):
+        #     writer.add_scalar(f"reward/{el}", v, iteration)
+        # writer.add_scalar(f"reward/cum_rew", (torch.sum(torch.mean(envs.rew_cum_reset, dim=0))).item(), iteration)
+        # writer.add_scalar(f"reward/avg_rew", envs.terrain_levels.float().mean().item(), iteration)
+        # for el, v in zip(envs.cstr_manager.get_names(), (100.0 * torch.mean(envs.cstr_mean_reset, dim=0)).tolist()):
+        #     writer.add_scalar(f"cstr/{el}", v, iteration)
 
         # CaT: must compute the CaT quantity
         not_dones = 1.0 - dones
@@ -255,83 +269,108 @@ def PPO(cfg: DictConfig, envs):
                 end = start + MINIBATCH_SIZE
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
-                logratio = newlogprob - b_logprobs[mb_inds]
-                ratio = logratio.exp()
+                # Wrap forward pass in autocast
+                with autocast():
+                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
+                    logratio = newlogprob - b_logprobs[mb_inds]
+                    ratio = logratio.exp()
 
-                with torch.no_grad():
-                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                    old_approx_kl = (-logratio).mean()
-                    approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [((ratio - 1.0).abs() > CLIP_COEF).float().mean().item()]
+                    with torch.no_grad():
+                        # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                        old_approx_kl = (-logratio).mean()
+                        approx_kl = ((ratio - 1) - logratio).mean()
+                        clipfracs += [((ratio - 1.0).abs() > CLIP_COEF).float().mean().item()]
 
-                mb_advantages = b_advantages[mb_inds]
-                if NORM_ADV:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+                    mb_advantages = b_advantages[mb_inds]
+                    if NORM_ADV:
+                        mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
-                # Policy loss
-                pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - CLIP_COEF, 1 + CLIP_COEF)
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                    # Policy loss
+                    pg_loss1 = -mb_advantages * ratio
+                    pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - CLIP_COEF, 1 + CLIP_COEF)
+                    pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
-                # Value loss
-                newvalue = newvalue.view(-1)
-                newvalue = agent.value_rms(newvalue, update = False)
-                if CLIP_VLOSS:
-                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                    v_clipped = b_values[mb_inds] + torch.clamp(
-                        newvalue - b_values[mb_inds],
-                        -CLIP_COEF,
-                        CLIP_COEF,
-                    )
-                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
-                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                    v_loss = 0.5 * v_loss_max.mean()
-                else:
-                    v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
+                    # Value loss
+                    newvalue = newvalue.view(-1)
+                    newvalue = agent.value_rms(newvalue, update = False)
+                    if CLIP_VLOSS:
+                        v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
+                        v_clipped = b_values[mb_inds] + torch.clamp(
+                            newvalue - b_values[mb_inds],
+                            -CLIP_COEF,
+                            CLIP_COEF,
+                        )
+                        v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
+                        v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                        v_loss = 0.5 * v_loss_max.mean()
+                    else:
+                        v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
 
-                entropy_loss = entropy.mean()
-                loss = pg_loss - ENT_COEF * entropy_loss + v_loss * VF_COEF
+                    entropy_loss = entropy.mean()
+                    loss = pg_loss - ENT_COEF * entropy_loss + v_loss * VF_COEF
 
+                # Replace optimizer steps with scaler operations
                 optimizer.zero_grad()
-                loss.backward()
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
                 nn.utils.clip_grad_norm_(agent.parameters(), MAX_GRAD_NORM)
+                scaler.step(optimizer)
+                scaler.update()
 
-                ########## WandB logging ##########
-                if wandb_activate:
-                    if iteration % wandb_update_freq == 0 or iteration == 1:
-                        # 리워드 로깅
-                        for el, v in zip(list(envs.episode_sums.keys())[:envs.numRewards], (torch.mean(envs.rew_mean_reset, dim=0)).tolist()):
-                            wandb.log({f"reward/{el}": v}, step=iteration)
+        elapsed_time = time.time() - current_time
+        print("Elapsed time per iter :", elapsed_time)
+        fps = (envs.num_envs * NUM_STEPS) / elapsed_time
 
-                        # print("envs.env.__dict__.keys()", envs.env.__dict__.keys())
-                        wandb.log({
-                            "reward/cumlated_rewards": (torch.sum(torch.mean(envs.rew_cum_reset, dim=0))).item(),
-                            "reward/avg_terrain_levels": envs.terrain_levels.float().mean().item(),
-                            "reward/length_mean": envs.env.progress_buf.float().mean().item()
-                        }, step=iteration)
+        total_time = time.time() - start_time
+        print("Total elapsed time :", total_time)
 
-                        # 컨스트레인트 로깅
-                        for el, v in zip(envs.cstr_manager.get_names(), (100.0 * torch.mean(envs.cstr_mean_reset, dim=0)).tolist()):
-                            wandb.log({f"cstr/{el}": v}, step=iteration)
-                        
-                        # 로스, KL 로깅
-                        wandb.log({
-                            "train/policy_loss": pg_loss.item(),
-                            "train/value_loss": v_loss.item(),
-                            "train/entropy_loss": entropy_loss.item(),
-                            "train/total_loss": loss.item(),
-                            "train/approx_kl": approx_kl.item(),
-                            "train/clip_fraction": np.mean(clipfracs)
-                        }, step=iteration)
-                ###################################
+        # Move outside of the epoch/minibatch loop
+        if wandb_activate and (iteration % wandb_update_freq == 0 or iteration == 1):
+            # Do all wandb logging here, after optimization steps complete
+            wandb.log({
+                "train/policy_loss": pg_loss.item(),
+                "train/value_loss": v_loss.item(),
+                "train/entropy_loss": entropy_loss.item(),
+                "train/total_loss": loss.item(),
+                "train/approx_kl": approx_kl.item(),
+                "train/clip_fraction": np.mean(clipfracs)
+            }, step=iteration)
 
-                optimizer.step()
+            # 리워드 로깅
+            for el, v in zip(list(envs.episode_sums.keys())[:envs.numRewards], (torch.mean(envs.rew_mean_reset, dim=0)).tolist()):
+                wandb.log({f"reward/{el}": v}, step=iteration)
+
+            wandb.log({
+                "reward/cumlated_rewards": (torch.sum(torch.mean(envs.rew_cum_reset, dim=0))).item(),
+                "reward/avg_terrain_levels": envs.terrain_levels.float().mean().item(),
+                "reward/length_mean": envs.env.progress_buf.float().mean().item(),
+                "reward/FPS": fps,
+                "reward/total_time (min)": total_time/60,
+                "reward/elapsed_time per epoch (s)": elapsed_time
+            }, step=iteration)
+
+            # 컨스트레인트 로깅
+            for el, v in zip(envs.cstr_manager.get_names(), (100.0 * torch.mean(envs.cstr_mean_reset, dim=0)).tolist()):
+                wandb.log({f"cstr/{el}": v}, step=iteration)
 
         if (iteration + 1) % 24 == 0:
-            model_path = f"{run_path}/cleanrl_model.pt"
-            torch.save(agent.state_dict(), model_path)
+            # model_path = f"{run_path}/cleanrl_model.pt"
+            last_model_path = f"{run_path}/cleanrl_model.pt"
+            torch.save(agent.state_dict(), last_model_path)
             print("Saved model")
+
+        if (iteration + 1) % 100 == 0:
+            model_path = f"{run_path}/cleanrl_model_{iteration + 1}.pt"
+            torch.save(agent.state_dict(), model_path)
+            print("Saved model from iteration", iteration + 1)
+
+        print(
+            # f"Iteration {iteration} | FPS: {fps:.2f} | "
+            f"FPS: {fps:.2f} | "
+            f"Policy Loss: {pg_loss.item():.3f} | Value Loss: {v_loss.item():.3f} | "
+            f"Entropy Loss: {entropy_loss.item():.3f} | "
+            f"Approx KL: {approx_kl.item():.3f} | Clip Fraction: {np.mean(clipfracs):.3f}"
+        )
 
 def eval_PPO(cfg: DictConfig, envs):
     checkpoint = cfg["checkpoint"]

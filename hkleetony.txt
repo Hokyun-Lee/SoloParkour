@@ -5,3 +5,4 @@ python train.py task=SoloParkour train=SoloParkourDDPG_demos_generate headless=T
 python train.py task=TocabiParkour headless=False task.env.control.damping_curriculum.enable=True
 python train.py task=TocabiParkour headless=True task.env.control.damping_curriculum.enable=True
 python train.py task=TocabiParkour headless=False task.env.control.damping_curriculum.enable=True test=True num_envs=64 checkpoint=./runs/
+python train.py task=TocabiParkour headless=False num_envs=64

@@ -51,51 +51,31 @@ env:
 
   randomCommandVelocityRanges:
     # # train
+    # linear_x: [0.0, 0.6] # min max [m/s] # -0.3 1.0
+    # linear_y: [-0.3, 0.3] # min max [m/s]
+    # yaw: [-0.2, 0.2] # min max [rad/s]
+    # train for TOCABI
     linear_x: [0.0, 0.6] # min max [m/s] # -0.3 1.0
-    linear_y: [-0.3, 0.3] # min max [m/s]
-    yaw: [-0.2, 0.2] # min max [rad/s]
-    # train
-    # linear_x: [0.0, 0.2] # min max [m/s] # -0.3 1.0
-    # linear_y: [-0.0, 0.0] # min max [m/s]
-    # yaw: [-0.0, 0.0] # min max [rad/s]
+    linear_y: [-0.0, 0.0] # min max [m/s]
+    yaw: [-0.0, 0.0] # min max [rad/s]
 
   control:
     # PD Drive parameters:
-    stiffness: 4.0 # [N*m/rad]
-    damping: 0.2 # [N*m*s/rad]
+    # stiffness: 4.0 # [N*m/rad]
+    # damping: 0.2 # [N*m*s/rad]
     # action scale: target angle = actionScale * action + defaultAngle
-    actionScale: 0.5
+    # actionScale: 0.5
+    actionScale: 0.05
+    # actionScale: 0.03
+    # actionScale: 1.0
     # decimation: Number of control action updates @ sim DT per policy DT
     # decimation: 4
-    decimation: 5
-    damping_curriculum:
-      enable: False
-      num_steps: 400000
-      init_damping: 0.05
+    decimation: 2
+    # damping_curriculum:
+    #   enable: False
+    #   num_steps: 400000
+    #   init_damping: 0.05
 
-  # defaultJointAngles: # = target angles when action = 0.0
-  #   FL_HAA: 0.05 # [rad]
-  #   HL_HAA: 0.05 # [rad]
-  #   FR_HAA: -0.05 # [rad]
-  #   HR_HAA: -0.05 # [rad]
-
-  #   FL_HFE: 0.6 # [rad]
-  #   HL_HFE: 0.6 # [rad]
-  #   FR_HFE: 0.6 # [rad]
-  #   HR_HFE: 0.6 # [rad]
-
-  #   FL_KFE: -1.2 # [rad]
-  #   HL_KFE: -1.2 # [rad]
-  #   FR_KFE: -1.2 # [rad]
-  #   HR_KFE: -1.2 # [rad]
-
-  # self.initial_dof_pos[:,0:] = torch.tensor([0.0, 0.0, -0.24, 0.6, -0.36, 0.0, \
-  #                                                   0.0, 0.0, -0.24, 0.6, -0.36, 0.0, \
-  #                                                   0.0, 0.0, 0.0, \
-  #                                                   0.3, 0.3, 1.5, -1.27, -1.0, 0.0, -1.0, 0.0,\
-  #                                                   0.0, 0.0, \
-  #                                                   -0.3, -0.3, -1.5, 1.27, 1.0, 0.0, 1.0, 0.0], device=self.device)
-  
   defaultJointAngles: # = target angles when action = 0.0
     L_HipYaw_Joint: 0.0
     L_HipRoll_Joint: 0.0
@@ -110,7 +90,6 @@ env:
     R_Knee_Joint: 0.6
     R_AnklePitch_Joint: -0.36
     R_AnkleRoll_Joint: 0.0
-
 
   urdfAsset:
     file: "dyros_tocabi/dyros_tocabi_parkour.urdf"
@@ -173,7 +152,7 @@ env:
     flatTerrainThreshold: 0.001
     vel_deadzone: 0.2
     base_height_target: 0.8
-    gait_period: 0.9
+    gait_period: 0.8
 
     # observations
     observe:
@@ -181,9 +160,9 @@ env:
       base_ang_vel: true
       commands: true
       misc: true
-      heights: true 
+      heights: true
       # ceilings: true
-      ceilings: false
+      ceilings: true
       phases: false
       imu: false
     measured_points_step: 0.08
@@ -197,8 +176,7 @@ env:
     linearVelocityScale: 2.0
     angularVelocityScale: 0.25
     dofPositionScale: 1.0
-    # dofVelocityScale: 0.05
-    dofVelocityScale: 0.5 #TOCABI
+    dofVelocityScale: 0.05
     heightMeasurementScale: 5.0
     imuAccelerationScale: 0.1
 
@@ -245,38 +223,57 @@ env:
 
 sim:
   # dt: 0.005
-  dt: 0.002 # simulation in 500Hz, decimation: 5  -> policy in 100Hz
+  dt: 0.002 # simulation in 500Hz, decimation: 2  -> policy in 250 Hz 
   substeps: 1
   up_axis: "z"
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
   gravity: [0.0, 0.0, -9.81]
+
   physx:
     num_threads: ${....num_threads}
-    solver_type: 0 # ${....solver_type}
+    solver_type: ${....solver_type}
     use_gpu: ${contains:"cuda",${....sim_device}} # set to False to run on CPU
     num_position_iterations: 4
     num_velocity_iterations: 1
-
-    contact_offset: 0.02
-    # rest_offset: 0.0
-    # bounce_threshold_velocity: 0.2
-    # # max_depenetration_velocity: 100.0
-    # default_buffer_size_multiplier: 5.0
-    # max_gpu_contact_pairs: 33554432 # 8388608 = 8*1024*1024
-    # # max_gpu_contact_pairs: 8388608 # 8388608 = 8*1024*1024
-    # max_gpu_contact_pairs: 70000000 # 8388608 = 8*1024*1024
-
-    num_subscenes: ${....num_subscenes}
-    
-    # contact_offset: 0.002
+    contact_offset: 0.005
     rest_offset: 0.0
-    bounce_threshold_velocity: 0.04
+    bounce_threshold_velocity: 0.2
     max_depenetration_velocity: 10.0
     default_buffer_size_multiplier: 5.0
-    # max_gpu_contact_pairs: 8388608 # 8*1024*1024
-    max_gpu_contact_pairs: 33554432 # 32*1024*1024
+    max_gpu_contact_pairs: 8388608 # 8*1024*1024
+    # max_gpu_contact_pairs: 33554432
+    num_subscenes: ${....num_subscenes}
+    contact_collection: 1 
 
-    contact_collection: 1 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (broken - do not use!)
+  # physx:
+  #   num_threads: ${....num_threads}
+  #   solver_type: 0 # ${....solver_type}
+  #   use_gpu: ${contains:"cuda",${....sim_device}} # set to False to run on CPU
+  #   num_position_iterations: 4
+  #   num_velocity_iterations: 1
+  #   contact_offset: 0.02
+  #   # rest_offset: 0.0
+  #   # bounce_threshold_velocity: 0.2
+  #   # # max_depenetration_velocity: 100.0
+  #   # default_buffer_size_multiplier: 5.0
+  #   # max_gpu_contact_pairs: 33554432 # 8388608 = 8*1024*1024
+  #   # # max_gpu_contact_pairs: 8388608 # 8388608 = 8*1024*1024
+  #   # max_gpu_contact_pairs: 70000000 # 8388608 = 8*1024*1024
+
+  #   num_subscenes: ${....num_subscenes}
+    
+  #   # contact_offset: 0.002
+  #   rest_offset: 0.0
+  #   bounce_threshold_velocity: 0.04
+  #   # bounce_threshold_velocity: 0.2
+  #   max_depenetration_velocity: 10.0
+  #   # max_depenetration_velocity: 100.0
+  #   default_buffer_size_multiplier: 5.0
+  #   # max_gpu_contact_pairs: 4000000 # 8*1024*1024
+  #   max_gpu_contact_pairs: 8388608 # 8*1024*1024
+  #   # max_gpu_contact_pairs: 33554432 # 32*1024*1024
+
+  #   contact_collection: 1 # 0: CC_NEVER (don't collect contact info), 1: CC_LAST_SUBSTEP (collect only contacts on last substep), 2: CC_ALL_SUBSTEPS (broken - do not use!)
 
 task:
   randomize: False

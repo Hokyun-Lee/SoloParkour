@@ -1105,7 +1105,7 @@ class SoloParkour(VecTask):
 
         # There is self.decimation steps of simulation between each call to the policy
         for i in range(self.decimation):
-
+            current_time = time.time()
             torques = torch.clip(
                 (
                     self.Kp
@@ -1137,7 +1137,9 @@ class SoloParkour(VecTask):
 
             # Gathering feet contact forces over several steps for averaging purpose (to avoid simulation glitches)
             self.filtered_contact_forces[:, :, :, 1:] = self.filtered_contact_forces[:, :, :, :-1]
-            self.filtered_contact_forces[:, :, :, 0] = self.contact_forces[:, self.grf_indices, :]         
+            self.filtered_contact_forces[:, :, :, 0] = self.contact_forces[:, self.grf_indices, :]
+            loop_time = time.time() - current_time
+            print("loop_time (i-th) :", loop_time," (", i, "-th)")          
 
 
         # Render the simulation (if there is a graphical interface)
